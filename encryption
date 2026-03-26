@@ -1,0 +1,95 @@
+import numpy as np
+import cv2
+from logistic_map import logistic_map
+from lfsr import lfsr
+
+# =========================
+# 1. Load image
+# =========================
+img = cv2.imread("images/cameraman.tif", 0)  # grayscale
+
+if img is None:
+    raise ValueError("Image not found or cannot be read. Check path!")
+
+rows, cols = img.shape
+
+# =========================
+# 2. Manual Flatten
+# =========================
+flat = []
+
+for i in range(rows):
+    for j in range(cols):
+        flat.append(int(img[i][j]))
+
+size = len(flat)
+
+# =========================
+# 3. Generate chaotic sequence
+# =========================
+chaos = logistic_map(0.5, 3.99, size)
+
+# =========================
+# 4. Manual Permutation (Confusion)
+# =========================
+indices = np.argsort(chaos)
+
+shuffled = []
+for idx in indices:
+    shuffled.append(flat[int(idx)])
+
+# =========================
+# 5. Generate LFSR keystream
+# =========================
+key_stream = lfsr(0b10101010, [7, 5, 4, 3], size)
+
+# convert to 0–255
+key_stream = [int(k * 255) for k in key_stream]
+
+# =========================
+# 6. Enhanced Diffusion (LFSR + Chaos + Avalanche)
+# =========================
+encrypted = []
+
+prev = 0  # feedback (avalanche)
+
+for i in range(size):
+    chaos_val = int(chaos[i] * 255)  # scale chaos to 0–255
+    
+    val = shuffled[i] ^ key_stream[i] ^ chaos_val ^ prev
+    
+    encrypted.append(val)
+    
+    prev = val  # update feedback
+
+# =========================
+# 7. Manual Reshape
+# =========================
+encrypted_img = []
+
+k = 0
+for i in range(rows):
+    row = []
+    for j in range(cols):
+        row.append(encrypted[k])
+        k += 1
+    encrypted_img.append(row)
+
+# =========================
+# 8. Convert to NumPy (ONLY for saving)
+# =========================
+encrypted_img = np.array(encrypted_img, dtype=np.uint8)
+
+# =========================
+# 9. Save results
+# =========================
+cv2.imwrite("images/cameraman_enc.tif", encrypted_img)
+cv2.imwrite("images/cameraman_enc.png", encrypted_img)
+
+# =========================
+# 10. Debug info
+# =========================
+print("Encryption done!")
+print("Shape:", encrypted_img.shape)
+print("Dtype:", encrypted_img.dtype)
+print("Min-Max:", encrypted_img.min(), "-", encrypted_img.max())
